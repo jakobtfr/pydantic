@@ -1249,9 +1249,17 @@ class BaseModel(metaclass=_model_construction.ModelMetaclass):
                 # See GH-7444 and GH-7825 for rationale and a performance benchmark
 
                 # First, do the fast (and sometimes faulty) __dict__ comparison
-                if self.__dict__ == other.__dict__:
-                    # If the check above passes, then pydantic fields are equal, we can return early
-                    return True
+                try:
+                    if self.__dict__ == other.__dict__:
+                        # If the check above passes, then pydantic fields are equal, we can return early
+                        return True
+                except (TypeError, ValueError):
+                    # Non-field values (such as cached numpy arrays) may not support a boolean comparison.
+                    # Compare only fields, retaining dict equality's boolean coercion and missing-key behavior.
+                    model_fields = type(self).__pydantic_fields__.keys()
+                    return {k: v for k, v in self.__dict__.items() if k in model_fields} == {
+                        k: v for k, v in other.__dict__.items() if k in model_fields
+                    }
 
                 # We don't want to trigger unnecessary costly filtering of __dict__ on all unequal objects, so we return
                 # early if there are no keys to ignore (we would just return False later on anyway)

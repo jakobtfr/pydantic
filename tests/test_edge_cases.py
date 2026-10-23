@@ -2925,6 +2925,62 @@ def test_eq_with_cached_property():
     assert obj1 == obj2
 
 
+@pytest.mark.parametrize('error', [TypeError, ValueError])
+def test_eq_ignores_cached_property_comparison_errors(error):
+    class CachedValue:
+        def __eq__(self, other):
+            raise error('cannot compare cached values')
+
+    class Model(BaseModel, frozen=True):
+        attr: int
+
+        @functools.cached_property
+        def cached(self) -> CachedValue:
+            return CachedValue()
+
+    obj1 = Model(attr=1)
+    obj2 = Model(attr=1)
+    different = Model(attr=2)
+    assert obj1 == obj2
+    obj1.cached
+    assert obj1 == obj2
+    obj2.cached
+    different.cached
+
+    assert obj1 == obj2
+    assert obj2 == obj1
+    assert obj1 != different
+    assert {obj1: 'value'}[obj2] == 'value'
+    assert len({obj1, obj2}) == 1
+
+
+@pytest.mark.parametrize('error', [TypeError, ValueError])
+@pytest.mark.parametrize('cached', [False, True])
+def test_eq_preserves_field_comparison_errors(error, cached):
+    class FieldValue:
+        def __eq__(self, other):
+            return self
+
+        def __bool__(self):
+            raise error('cannot compare field values')
+
+    class Model(BaseModel, arbitrary_types_allowed=True):
+        attr: FieldValue
+
+        @functools.cached_property
+        def cached(self) -> int:
+            return 0
+
+    obj1 = Model(attr=FieldValue())
+    obj2 = Model(attr=FieldValue())
+    if cached:
+        obj1.cached
+        obj2.cached
+
+    with pytest.raises(error, match='cannot compare field values'):
+        obj1 == obj2
+
+
 def test_model_metaclass_on_other_class() -> None:
     """Test that `ModelMetaclass` can be used as a metaclass on an unrelated class.
 
